@@ -44,8 +44,8 @@ enriquecedor = "cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/script_enriquecedor"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "respx>=0.21",
