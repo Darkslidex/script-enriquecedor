@@ -1,10 +1,11 @@
 """Registro de estrategias de descubrimiento por vertical.
 
 DISCOVERY_SOURCES: descripción legible de la fuente (para UI).
-DISCOVERY_REGISTRY: mapeo Vertical → clase DiscoveryStrategy (Fase 2).
+get_discovery_strategy(): retorna instancia de DiscoveryStrategy para un vertical.
 """
 
 from ..core.models import Vertical
+from .base import DiscoveryStrategy
 
 # Descripción de la fuente de descubrimiento por vertical (mostrada en menús)
 DISCOVERY_SOURCES: dict[Vertical, str] = {
@@ -25,5 +26,22 @@ DISCOVERY_SOURCES: dict[Vertical, str] = {
     Vertical.AERONAUTICAS: "Google Dorks",
 }
 
-# TODO: implementar en Fase 2 paso 15
-# DISCOVERY_REGISTRY: dict[Vertical, Type[DiscoveryStrategy]] = { ... }
+
+def get_discovery_strategy(vertical: Vertical) -> DiscoveryStrategy:
+    """Retorna la estrategia de descubrimiento para un vertical.
+
+    En Fase 1, solo Barrios Privados tiene implementación real.
+    El resto usa un stub que retorna lista vacía (se implementará en Fase 2).
+    """
+    if vertical == Vertical.BARRIOS_PRIVADOS:
+        from .zonaprop_argenprop import ZonapropArgenpropDiscovery
+        return ZonapropArgenpropDiscovery()
+
+    # Stub para verticales no implementados aún (Fase 2)
+    from .base import DiscoveredLead
+
+    class _StubDiscovery(DiscoveryStrategy):
+        async def discover(self, limit: int = 100) -> list[DiscoveredLead]:
+            return []
+
+    return _StubDiscovery()
