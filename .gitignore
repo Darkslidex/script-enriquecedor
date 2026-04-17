@@ -1,0 +1,38 @@
+# Secretos
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.uv/
+*.egg-info/
+dist/
+build/
+
+# uv
+uv.lock  # solo ignorar si no querés commitear el lockfile (recomendado ignorar en tools)
+
+# Datos locales (no subir al repo)
+data/raw/
+data/enriched/
+data/uploaded/
+data/logs/
+data/state.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
