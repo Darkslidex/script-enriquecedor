@@ -175,18 +175,28 @@ def _handle_scrape(vertical: Vertical) -> None:
     nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
     console.print()
 
-    # ── Placeholder hasta Fase 1 paso 10 ──────────────────────────────────
-    console.print(
-        Panel(
-            f"[bold yellow]Pipeline no implementado aún[/bold yellow]\n\n"
-            f"Vertical: [cyan]{nombre}[/cyan]\n"
-            f"Leads a procesar: [bold]{size}[/bold]\n\n"
-            f"[dim]Disponible en Fase 1 paso 10 (pipeline.py)[/dim]",
-            title="[bold]Scrapear[/bold]",
-            border_style="yellow",
+    import asyncio
+    from script_enriquecedor.pipeline import run, PipelineConfig
+
+    config = PipelineConfig(vertical=vertical, limit=size, concurrency=3)
+    try:
+        result = asyncio.run(run(config))
+        console.print()
+        if result.saved:
+            print_success(
+                f"Lote guardado: [bold]{result.saved}[/bold] leads "
+                f"([cyan]lote #{result.lote_id}[/cyan])"
+            )
+        else:
+            print_warning("No se guardaron leads en este lote.")
+        console.print(
+            f"  Descubiertos: [bold]{result.discovered}[/bold]  "
+            f"Enriquecidos: [bold]{result.enriched}[/bold]  "
+            f"Errores: [red]{result.errors}[/red]"
         )
-    )
-    # ── Fin placeholder ────────────────────────────────────────────────────
+    except Exception as exc:
+        print_error(f"Error en el pipeline: {exc}")
+        log.error("cli.pipeline_error", exc=str(exc))
 
     # Post-scrape: qué hacer ahora
     _handle_post_scrape(vertical)
@@ -230,18 +240,50 @@ def _handle_ver_lotes(vertical: Vertical) -> None:
 
 
 def _handle_ver_resumen(vertical: Vertical) -> None:
-    """Muestra la última ejecución registrada."""
+    """Muestra calidad del lote consolidado + última ejecución."""
+    from script_enriquecedor.storage.batch_manager import consolidate
+    from script_enriquecedor.storage.csv_writer import read_csv
+    from script_enriquecedor.storage.quality import summarize_batch
+    from script_enriquecedor.ui.tables import batch_quality_summary, execution_history
+    from script_enriquecedor.core.models import Lead
+
     state = get_state()
-    last = state.get_last_ejecucion(vertical)
     nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
-
     console.print()
-    if last is None:
-        print_info(f"No hay ejecuciones registradas para [bold]{nombre}[/bold].")
-        return
 
-    from script_enriquecedor.ui.tables import execution_history
-    console.print(execution_history([last]))
+    # Quality summary del lote consolidado
+    lotes = state.get_lotes_pendientes(vertical)
+    if lotes:
+        try:
+            path, total = consolidate(vertical)
+            rows = read_csv(path)
+            leads = [
+                Lead(
+                    nombre=r.get("nombre", ""),
+                    vertical=vertical,
+                    email=r.get("email") or None,  # type: ignore[arg-type]
+                    telefono=r.get("telefono") or None,
+                    sitio_web=r.get("sitio_web") or None,
+                    partido=r.get("partido") or None,
+                    localidad=r.get("localidad") or None,
+                    latitud=float(r["latitud"]) if r.get("latitud") else None,
+                    longitud=float(r["longitud"]) if r.get("longitud") else None,
+                    email_validado=(r.get("email_validado") == "true"),
+                )
+                for r in rows if r.get("nombre")
+            ]
+            summary = summarize_batch(leads, vertical)
+            console.print(batch_quality_summary(summary))
+            console.print()
+        except Exception as exc:
+            print_warning(f"No se pudo calcular calidad del lote: {exc}")
+
+    # Última ejecución
+    last = state.get_last_ejecucion(vertical)
+    if last:
+        console.print(execution_history([last]))
+    else:
+        print_info(f"No hay ejecuciones registradas para [bold]{nombre}[/bold].")
     console.print()
 
 
@@ -277,36 +319,84 @@ def _handle_upload(vertical: Vertical) -> None:
 
 
 def _upload_preview(vertical: Vertical, lotes) -> None:
-    """Placeholder: preview de leads del lote consolidado."""
-    console.print(
-        Panel(
-            "[bold yellow]Preview no implementado aún[/bold yellow]\n\n"
-            "[dim]Disponible en Fase 1 paso 9 (batch_manager.py)[/dim]",
-            border_style="yellow",
-        )
-    )
+    """Preview de leads del lote consolidado."""
+    from script_enriquecedor.storage.batch_manager import consolidate
+    from script_enriquecedor.storage.csv_writer import read_csv
+    from script_enriquecedor.ui.tables import leads_preview
+    from script_enriquecedor.core.models import Lead
+
+    nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
+    try:
+        consolidated_path, total = consolidate(vertical)
+        rows = read_csv(consolidated_path)
+        # Convertir a leads mínimos para preview
+        preview_leads = [
+            Lead(
+                nombre=r.get("nombre", ""),
+                vertical=vertical,
+                email=r.get("email") or None,  # type: ignore[arg-type]
+                telefono=r.get("telefono") or None,
+                partido=r.get("partido") or None,
+                email_validado=(r.get("email_validado") == "true"),
+            )
+            for r in rows[:10]
+        ]
+        console.print()
+        console.print(leads_preview(preview_leads, max_rows=10))
+        console.print(f"\n  [dim]Total en lote consolidado:[/dim] [bold]{total}[/bold] leads\n")
+    except Exception as exc:
+        print_error(f"No se pudo cargar el preview: {exc}")
 
 
 def _upload_ver_duplicados() -> None:
-    """Placeholder: detección de duplicados vs producción."""
-    console.print(
-        Panel(
-            "[bold yellow]Detección de duplicados no implementada aún[/bold yellow]\n\n"
-            "[dim]Disponible en Fase 3 (dedup avanzado)[/dim]",
-            border_style="yellow",
+    """Detección de duplicados fuzzy en el lote pendiente."""
+    from script_enriquecedor.storage.csv_writer import read_csv
+    from script_enriquecedor.core.dedup import find_fuzzy_matches
+    from script_enriquecedor.core.models import Lead
+    from script_enriquecedor.ui.tables import fuzzy_duplicates_table
+    from pathlib import Path
+
+    # Lee el CSV consolidado más reciente en data/enriched/
+    csv_paths = list(Path("data/enriched").rglob("consolidated.csv"))
+    if not csv_paths:
+        print_info("No hay CSVs consolidados aún. Primero scrapea y revisá los lotes.")
+        return
+
+    # Usa el más reciente
+    csv_path = max(csv_paths, key=lambda p: p.stat().st_mtime)
+    rows = read_csv(csv_path)
+    leads = [
+        Lead(nombre=r.get("nombre", ""), vertical=Vertical.BARRIOS_PRIVADOS,
+             partido=r.get("partido") or None)
+        for r in rows if r.get("nombre")
+    ]
+
+    matches = find_fuzzy_matches(leads, threshold=85)
+    console.print()
+    if not matches:
+        print_success("No se detectaron duplicados potenciales.")
+    else:
+        console.print(fuzzy_duplicates_table(matches))
+        console.print(
+            f"\n  [dim]Threshold:[/dim] 85%  "
+            f"[dim]Revisá manualmente antes de subir.[/dim]\n"
         )
-    )
 
 
 def _upload_exportar(vertical: Vertical, lotes) -> None:
-    """Placeholder: exportar CSV consolidado sin subir."""
-    console.print(
-        Panel(
-            "[bold yellow]Exportar CSV no implementado aún[/bold yellow]\n\n"
-            "[dim]Disponible en Fase 1 paso 9 (batch_manager.py)[/dim]",
-            border_style="yellow",
+    """Consolida y exporta CSV a data/enriched/<vertical>/consolidated.csv."""
+    from script_enriquecedor.storage.batch_manager import consolidate
+
+    nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
+    try:
+        path, total = consolidate(vertical)
+        console.print()
+        print_success(
+            f"CSV exportado: [bold cyan]{path}[/bold cyan]\n"
+            f"  [dim]Total leads:[/dim] [bold]{total}[/bold]"
         )
-    )
+    except Exception as exc:
+        print_error(f"Error al exportar: {exc}")
 
 
 def _upload_ejecutar(vertical: Vertical, lotes) -> bool:
@@ -326,16 +416,29 @@ def _upload_ejecutar(vertical: Vertical, lotes) -> bool:
         print_warning("Upload cancelado.")
         return False
 
-    # ── Placeholder hasta Fase 1 paso 9 ───────────────────────────────────
-    console.print(
-        Panel(
-            "[bold yellow]Upload no implementado aún[/bold yellow]\n\n"
-            "[dim]Disponible en Fase 1 paso 9 (vps_uploader.py)[/dim]",
-            border_style="yellow",
+    from script_enriquecedor.storage.batch_manager import consolidate, mark_lote_uploaded
+    from script_enriquecedor.storage.vps_uploader import upload
+
+    try:
+        consolidated_path, total = consolidate(vertical)
+    except Exception as exc:
+        print_error(f"Error al consolidar lotes: {exc}")
+        return False
+
+    result = upload(vertical, consolidated_path)
+
+    if result.success:
+        for lote in lotes:
+            mark_lote_uploaded(lote.id)
+        print_success(
+            f"[bold]{total}[/bold] leads subidos al VPS correctamente."
         )
-    )
-    return False
-    # ── Fin placeholder ────────────────────────────────────────────────────
+        return True
+    else:
+        print_error(f"Error al subir: {result.error}")
+        if result.rsync_output:
+            console.print(f"[dim]{result.rsync_output[:300]}[/dim]")
+        return False
 
 
 def _upload_descartar(lotes) -> None:
@@ -377,19 +480,17 @@ def _handle_activar() -> None:
         print_info("Activación cancelada.")
         return
 
-    # ── Activar (Fase 2: prompt_generator.py generará el prompt LLM) ──────
     from script_enriquecedor.ui.progress import make_spinner
+    from script_enriquecedor.enrichment.prompt_generator import ensure_prompt
     nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
 
     with make_spinner() as spinner:
         task = spinner.add_task("Generando prompt LLM...", total=None)
-
-        # Placeholder: en Fase 2 llamará prompt_generator.generate_prompt(vertical)
-        prompt_path = f"src/script_enriquecedor/enrichment/prompts/{vertical.value}.md"
-        schema_path = f"src/script_enriquecedor/core/metadata_schemas/{vertical.value}.py"
+        prompt_file = ensure_prompt(vertical)
 
         spinner.update(task, description="Guardando estado...")
-        state.activate_vertical(vertical, prompt_path, schema_path)
+        schema_path = f"src/script_enriquecedor/core/metadata_schemas/{vertical.value}.py"
+        state.activate_vertical(vertical, str(prompt_file), schema_path)
 
     console.print()
     print_success(f"[bold]{nombre}[/bold] activado.")
