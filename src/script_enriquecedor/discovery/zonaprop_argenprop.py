@@ -104,7 +104,10 @@ async def _search_ddg(query: str) -> list[str]:
     Retorna [] si el módulo no está disponible o hay error.
     """
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS  # nombre viejo (<6.x)
         results = []
         with DDGS() as ddgs:
             for r in ddgs.text(query, region="ar-es", max_results=10):
