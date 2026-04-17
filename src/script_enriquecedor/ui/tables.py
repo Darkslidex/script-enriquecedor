@@ -193,6 +193,74 @@ def execution_history(ejecuciones: list[Ejecucion]) -> Table:
     return table
 
 
+def batch_quality_summary(summary: "BatchQualitySummary") -> Table:
+    """Tabla con resumen de calidad de un batch de leads."""
+    from ..storage.quality import BatchQualitySummary
+
+    nombre_vertical = VERTICAL_DISPLAY_NAMES.get(summary.vertical, summary.vertical.value)
+    title_color = "[green]" if summary.upload_ready else "[yellow]"
+    title = f"{title_color}Resumen de Calidad — {nombre_vertical}[/]"
+
+    table = Table(title=title, box=box.ROUNDED, show_lines=False)
+    table.add_column("Métrica", style="bold", min_width=26)
+    table.add_column("Valor", justify="right", min_width=12)
+    table.add_column("Estado", justify="center", width=8)
+
+    def _pct_color(pct: float, warn=40, ok=70) -> str:
+        if pct >= ok:
+            return f"[green]{pct:.1f}%[/green]"
+        elif pct >= warn:
+            return f"[yellow]{pct:.1f}%[/yellow]"
+        return f"[red]{pct:.1f}%[/red]"
+
+    def _ok(pct: float, ok=50) -> str:
+        return "[green]✓[/green]" if pct >= ok else "[red]✗[/red]"
+
+    table.add_row("Total leads", str(summary.total), "")
+    table.add_row("Score promedio", f"{summary.avg_score:.1f}/100",
+                  "[green]✓[/green]" if summary.avg_score >= 40 else "[red]✗[/red]")
+    table.add_row("Con email", _pct_color(summary.pct_with_email), _ok(summary.pct_with_email))
+    table.add_row("Con teléfono", _pct_color(summary.pct_with_phone), _ok(summary.pct_with_phone))
+    table.add_row("Con sitio web", _pct_color(summary.pct_with_website), _ok(summary.pct_with_website))
+    table.add_row("Con coordenadas", _pct_color(summary.pct_with_coords, warn=20, ok=50), "")
+    table.add_row("Email validado", _pct_color(summary.pct_email_validated, warn=10, ok=30), "")
+    table.add_row("Alta calidad (≥70)", _pct_color(summary.pct_high_quality), "")
+    table.add_row("Calidad media (40–69)", f"{summary.medium_quality}", "")
+    table.add_row("Baja calidad (<40)", f"[red]{summary.low_quality}[/red]" if summary.low_quality else "0", "")
+    table.add_row("Dup. exactos", str(summary.exact_duplicates),
+                  "[red]!" if summary.exact_duplicates else "[green]✓[/green]")
+    table.add_row("Dup. fuzzy", str(summary.fuzzy_duplicates),
+                  "[yellow]!" if summary.fuzzy_duplicates else "[green]✓[/green]")
+
+    return table
+
+
+def fuzzy_duplicates_table(matches: list) -> Table:
+    """Tabla de pares de leads con alta similitud (duplicados fuzzy)."""
+    table = Table(
+        title=f"Duplicados potenciales ({len(matches)})",
+        box=box.SIMPLE,
+        show_lines=True,
+    )
+    table.add_column("Lead A", style="bold", min_width=24)
+    table.add_column("Lead B", style="bold cyan", min_width=24)
+    table.add_column("Score", justify="center", width=8)
+    table.add_column("Partido A / B", min_width=20)
+    table.add_column("Tipo", width=16)
+
+    for m in matches[:20]:  # máximo 20 filas
+        score_color = "[red]" if m.score >= 95 else "[yellow]"
+        table.add_row(
+            m.lead_a.nombre[:30],
+            m.lead_b.nombre[:30],
+            f"{score_color}{m.score:.0f}%[/]",
+            f"{m.lead_a.partido or '—'} / {m.lead_b.partido or '—'}",
+            m.match_type,
+        )
+
+    return table
+
+
 def vertical_info(vertical: Vertical, metadata_fields: list[str]) -> Table:
     """Tabla descriptiva de un vertical al activarlo."""
     from ..discovery.registry import DISCOVERY_SOURCES
