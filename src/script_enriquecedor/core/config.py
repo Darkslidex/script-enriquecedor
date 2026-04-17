@@ -21,11 +21,13 @@ class Settings(BaseSettings):
     )
 
     # ── LLM ────────────────────────────────────────────────────────────────
-    # Formato LiteLLM: "gpt-4o-mini" | "claude-haiku-4-5" | "gemini-2.5-flash" | "ollama/llama3.1"
-    litellm_model: str = "gpt-4o-mini"
+    # Formato LiteLLM: "gpt-4o-mini" | "claude-haiku-4-5" | "gemini-2.5-flash"
+    #                  "openrouter/meta-llama/llama-3.3-70b-instruct:free" | "ollama/llama3.1"
+    litellm_model: str = "openrouter/openai/gpt-oss-20b:free"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    openrouter_api_key: str = ""
 
     # ── APIs de enriquecimiento ────────────────────────────────────────────
     hunter_api_key: str = ""
@@ -63,7 +65,12 @@ class Settings(BaseSettings):
         # ollama/local no necesita API key
         if self.litellm_model.startswith("ollama/"):
             return True
-        return bool(self.openai_api_key or self.anthropic_api_key or self.gemini_api_key)
+        return bool(
+            self.openai_api_key
+            or self.anthropic_api_key
+            or self.gemini_api_key
+            or self.openrouter_api_key
+        )
 
 
 @lru_cache(maxsize=1)

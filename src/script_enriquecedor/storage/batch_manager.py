@@ -17,8 +17,8 @@ def _vertical_dir(vertical: Vertical) -> Path:
     return DATA_DIR / vertical.value
 
 
-def _lote_path(vertical: Vertical, lote_id: int) -> Path:
-    return _vertical_dir(vertical) / f"lote_{lote_id:04d}.csv"
+def _lote_path(vertical: Vertical, lote_id) -> Path:
+    return _vertical_dir(vertical) / f"lote_{lote_id}.csv"
 
 
 def _consolidated_path(vertical: Vertical) -> Path:

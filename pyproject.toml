@@ -23,7 +23,7 @@ dependencies = [
     "playwright>=1.44",
     # Búsqueda / descubrimiento
     "googlesearch-python>=1.2",
-    "duckduckgo-search>=6",
+    "ddgs>=0.1",
     # Geocoding
     "geopy>=2.4",
     # Secretos / config
@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.scripts]
-enriquecedor = "cli:main"
+enriquecedor = "script_enriquecedor.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/script_enriquecedor"]

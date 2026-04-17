@@ -73,6 +73,11 @@ class LLMClient:
         import logging
         logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
+        # Pasar la API key de OpenRouter a LiteLLM si está configurada
+        if self._settings.openrouter_api_key:
+            import os
+            os.environ.setdefault("OPENROUTER_API_KEY", self._settings.openrouter_api_key)
+
     # ── Prompt ────────────────────────────────────────────────────────────
 
     def _load_prompt(self, vertical: Vertical) -> str:
@@ -171,13 +176,20 @@ class LLMClient:
                 reraise=False,
             ):
                 with attempt:
-                    response = await litellm.acompletion(
-                        model=model,
-                        messages=messages,
-                        response_format={"type": "json_object"},
-                        temperature=0.0,
-                        timeout=60,
+                    # Modelos free de OpenRouter no soportan json_object mode
+                    supports_json_mode = not (
+                        ":free" in model or "ollama/" in model
                     )
+                    kwargs: dict = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": 0.0,
+                        "timeout": 60,
+                    }
+                    if supports_json_mode:
+                        kwargs["response_format"] = {"type": "json_object"}
+
+                    response = await litellm.acompletion(**kwargs)
 
                     content = response.choices[0].message.content or ""
                     result = self._parse_json(content)
@@ -201,14 +213,25 @@ class LLMClient:
             return None
 
     def _parse_json(self, content: str) -> dict:
-        """Parsea la respuesta JSON del LLM (maneja markdown code blocks)."""
-        # Limpiar posibles bloques ```json ... ```
+        """Parsea la respuesta JSON del LLM (maneja markdown code blocks y thinking tags)."""
+        # Eliminar bloques ```json ... ``` y etiquetas de thinking (<think>...</think>)
+        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
         content = re.sub(r"```(?:json)?\s*", "", content).strip().rstrip("`").strip()
+        if not content:
+            return {}
+        # Intentar parsear directamente
         try:
             return json.loads(content)
-        except json.JSONDecodeError as e:
-            log.warning("llm_json_parse_error", error=str(e), preview=content[:100])
-            return {}
+        except json.JSONDecodeError:
+            pass
+        # Fallback: extraer el primer bloque JSON del texto
+        match = re.search(r"\{.*\}", content, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError as e:
+                log.warning("llm_json_parse_error", error=str(e), preview=content[:100])
+        return {}
 
     # ── Construcción del Lead ──────────────────────────────────────────────
 

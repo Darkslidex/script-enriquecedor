@@ -20,22 +20,22 @@ log = structlog.get_logger(__name__)
 
 # Dominios a descartar del descubrimiento (portales inmobiliarios, etc.)
 _BANNED_DOMAINS = {
-    "zonaprop.com.ar",
-    "argenprop.com",
-    "mercadolibre.com.ar",
-    "infocasas.com.uy",
-    "properati.com.ar",
-    "remax.com.ar",
-    "navent.com",
-    "clasificados.clarin.com",
-    "olx.com.ar",
-    "facebook.com",
-    "instagram.com",
-    "twitter.com",
-    "linkedin.com",
-    "youtube.com",
-    "wikipedia.org",
-    "wikidata.org",
+    # Portales inmobiliarios
+    "zonaprop.com.ar", "argenprop.com", "mercadolibre.com.ar",
+    "infocasas.com.uy", "properati.com.ar", "remax.com.ar",
+    "navent.com", "clasificados.clarin.com", "olx.com.ar",
+    # Redes sociales
+    "facebook.com", "instagram.com", "twitter.com", "x.com",
+    "linkedin.com", "youtube.com", "tiktok.com", "pinterest.com",
+    "mx.pinterest.com",
+    # Enciclopedias / wikis
+    "wikipedia.org", "wikidata.org", "wikimedia.org",
+    # Presentaciones / docs
+    "slideserve.com", "slideshare.net", "scribd.com", "issuu.com",
+    "academia.edu", "researchgate.net",
+    # Directorios genéricos / SEO
+    "paginas-amarillas.com.ar", "guialocal.com.ar", "yell.com",
+    "yelp.com", "tripadvisor.com",
 }
 
 _PAUSE_SECONDS = 3600  # 1h pausa en capa 3
@@ -185,7 +185,10 @@ class DorksDiscovery(DiscoveryStrategy):
     async def _ddg_search(self, query: str, limit: int) -> list[DiscoveredLead]:
         """Búsqueda via duckduckgo-search."""
         try:
-            from duckduckgo_search import DDGS
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS
 
             def _sync_ddg() -> list[dict]:
                 with DDGS() as ddgs:
