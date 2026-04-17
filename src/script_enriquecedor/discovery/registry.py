@@ -28,20 +28,68 @@ DISCOVERY_SOURCES: dict[Vertical, str] = {
 
 
 def get_discovery_strategy(vertical: Vertical) -> DiscoveryStrategy:
-    """Retorna la estrategia de descubrimiento para un vertical.
+    """Retorna la estrategia de descubrimiento para un vertical."""
+    from .zonaprop_argenprop import ZonapropArgenpropDiscovery
+    from .caip import CAIPDiscovery
+    from .anmat import ANMATDiscovery
+    from .sssalud import SSSALUDDiscovery
+    from .gmaps import GMapsDiscovery
+    from .arlog import ARLOGDiscovery
+    from .dorks import make_vertical_dorks_discovery
 
-    En Fase 1, solo Barrios Privados tiene implementación real.
-    El resto usa un stub que retorna lista vacía (se implementará en Fase 2).
-    """
-    if vertical == Vertical.BARRIOS_PRIVADOS:
-        from .zonaprop_argenprop import ZonapropArgenpropDiscovery
-        return ZonapropArgenpropDiscovery()
+    _DIRECT_MAP: dict[Vertical, DiscoveryStrategy] = {
+        Vertical.BARRIOS_PRIVADOS: ZonapropArgenpropDiscovery(),
+        Vertical.PARQUES_INDUSTRIALES: CAIPDiscovery(),
+        Vertical.DROGUERIAS: ANMATDiscovery(),
+        Vertical.CLINICAS: SSSALUDDiscovery(),
+        Vertical.HOTELES: GMapsDiscovery(),
+        Vertical.LOGISTICAS: ARLOGDiscovery(),
+    }
 
-    # Stub para verticales no implementados aún (Fase 2)
-    from .base import DiscoveredLead
+    if vertical in _DIRECT_MAP:
+        return _DIRECT_MAP[vertical]
 
-    class _StubDiscovery(DiscoveryStrategy):
-        async def discover(self, limit: int = 100) -> list[DiscoveredLead]:
-            return []
+    # Verticales con Google Dorks
+    _DORKS_CONFIG: dict[Vertical, list[str]] = {
+        Vertical.UNIVERSIDADES: [
+            'site:.ar "universidad privada" "seguridad" "contacto"',
+            '"universidad" Argentina "sistema de seguridad" OR "CCTV" site:.ar',
+        ],
+        Vertical.ENTES_ESTATALES: [
+            'site:gob.ar "seguridad" "contacto" "infraestructura"',
+            '"organismo estatal" Argentina "seguridad electronica" "contacto"',
+        ],
+        Vertical.CONSULADOS: [
+            '"consulado" Argentina "seguridad" "contacto" site:.ar OR site:.com',
+            '"consulado general" Buenos Aires "seguridad" "contacto"',
+        ],
+        Vertical.EMBAJADAS: [
+            '"embajada" Buenos Aires "seguridad" "contacto"',
+            '"embajada" Argentina "sistema de seguridad" "contacto"',
+        ],
+        Vertical.DEPOSITOS_FISCALES: [
+            'site:.ar "deposito fiscal" "seguridad" "contacto"',
+            '"zona franca" OR "deposito fiscal" Argentina "seguridad electronica"',
+        ],
+        Vertical.EMPRESAS: [
+            'site:.ar "empresa" "seguridad electronica" "contacto" Argentina',
+            '"empresa manufacturera" Argentina "CCTV" OR "camara de seguridad" "contacto"',
+        ],
+        Vertical.PLANTAS_INDUSTRIALES: [
+            'site:.ar "planta industrial" "seguridad" "contacto"',
+            '"planta de produccion" Argentina "sistema de seguridad" "contacto"',
+        ],
+        Vertical.TERMINALES_PORTUARIAS: [
+            'site:.ar "terminal portuaria" "seguridad" "contacto"',
+            '"puerto" Argentina "seguridad" "terminal" "contacto" site:.ar',
+        ],
+        Vertical.AERONAUTICAS: [
+            'site:.ar "empresa aeronautica" "seguridad" "contacto"',
+            '"aviacion" OR "aeronautica" Argentina "seguridad" "hangar" "contacto"',
+        ],
+    }
 
-    return _StubDiscovery()
+    dorks = _DORKS_CONFIG.get(vertical, [
+        f'site:.ar "{vertical.value.replace("_", " ")}" "seguridad" "contacto"',
+    ])
+    return make_vertical_dorks_discovery(vertical, dorks)
