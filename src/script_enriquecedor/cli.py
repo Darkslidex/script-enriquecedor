@@ -147,6 +147,8 @@ def _handle_vertical_ops(vertical: Vertical) -> None:
 
         if op == VerticalOp.SCRAPEAR:
             _handle_scrape(vertical)
+        elif op == VerticalOp.PHANTOMBUSTER:
+            _handle_phantombuster(vertical)
         elif op == VerticalOp.VER_LOTES:
             _handle_ver_lotes(vertical)
         elif op == VerticalOp.SUBIR_VPS:
@@ -211,6 +213,47 @@ def _handle_post_scrape(vertical: Vertical) -> None:
     elif idx == 1:
         _handle_upload(vertical)
     # idx == 2 o None → volver (no hace nada, sale de la función)
+
+
+def _handle_phantombuster(vertical: Vertical) -> None:
+    """Importa CSVs de PhantomBuster y los pasa por el pipeline de enriquecimiento."""
+    import asyncio
+    from .pipeline import run_from_phantombuster, PipelineConfig
+    from .core.config import get_settings
+
+    settings = get_settings()
+    console.print()
+    print_info(
+        f"Leyendo CSVs desde: [cyan]{settings.phantombuster_input_dir}[/cyan]\n"
+        "  Copiá los archivos exportados por PhantomBuster a ese directorio antes de continuar."
+    )
+    console.print()
+
+    if not confirm("¿Continuar con el import?", default=True):
+        return
+
+    config = PipelineConfig(vertical=vertical, concurrency=3)
+    try:
+        result = asyncio.run(run_from_phantombuster(config))
+        console.print()
+        if result.saved:
+            print_success(
+                f"Lote guardado: [bold]{result.saved}[/bold] leads "
+                f"([cyan]lote #{result.lote_id}[/cyan])"
+            )
+        else:
+            print_warning("No se encontraron CSVs en el directorio o no se pudo guardar.")
+        console.print(
+            f"  Importados: [bold]{result.discovered}[/bold]  "
+            f"Apollo: [bold]{result.apollo_enriched}[/bold]  "
+            f"Hunter/Snov: [bold]{result.validated_email + result.snov_enriched}[/bold]  "
+            f"Errores: [red]{result.errors}[/red]"
+        )
+    except Exception as exc:
+        print_error(f"Error en el import PhantomBuster: {exc}")
+        log.error("cli.phantombuster_error", exc=str(exc))
+
+    _handle_post_scrape(vertical)
 
 
 # ── Lotes ──────────────────────────────────────────────────────────────────────
@@ -514,10 +557,15 @@ def _handle_estado() -> None:
     show_general_status(activos, lotes_por_v, leads_por_v)
 
     settings = get_settings()
+    def _api_status(ok: bool) -> str:
+        return "[green]configurado[/green]" if ok else "[dim]no configurado[/dim]"
+
     console.print(
         f"  [dim]Modelo LLM:[/dim]      [cyan]{settings.litellm_model}[/cyan]\n"
-        f"  [dim]Hunter.io:[/dim]       {'[green]configurado[/green]' if settings.has_hunter else '[dim]no configurado[/dim]'}\n"
-        f"  [dim]Google Places:[/dim]   {'[green]configurado[/green]' if settings.has_google_places else '[dim]no configurado[/dim]'}\n"
+        f"  [dim]Hunter.io:[/dim]       {_api_status(settings.has_hunter)}\n"
+        f"  [dim]Snov.io:[/dim]         {_api_status(settings.has_snov)}\n"
+        f"  [dim]Apollo.io:[/dim]       {_api_status(settings.has_apollo)}\n"
+        f"  [dim]Google Places:[/dim]   {_api_status(settings.has_google_places)}\n"
         f"  [dim]VPS alias:[/dim]       [cyan]{settings.vps_ssh_alias}[/cyan]\n"
     )
 
