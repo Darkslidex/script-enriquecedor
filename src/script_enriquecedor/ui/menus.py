@@ -69,7 +69,8 @@ class MainMenuChoice(str, Enum):
 
 class VerticalOp(str, Enum):
     SCRAPEAR = "scrapear"
-    PHANTOMBUSTER = "phantombuster"
+    LINKEDIN_CSV = "linkedin_csv"
+    MERGE = "merge"
     VER_LOTES = "ver_lotes"
     SUBIR_VPS = "subir_vps"
     VER_RESUMEN = "ver_resumen"
@@ -185,14 +186,16 @@ def vertical_ops_menu(vertical: Vertical, pending_leads: int = 0) -> VerticalOp 
 
     hints = [
         "",
-        "importar CSV de LinkedIn Scraper",
+        "CSV exportado manualmente de Sales Navigator → data/input/linkedin/",
+        "unifica scraper + LinkedIn en un CSV Prisma-válido",
         f"{pending_leads} leads acumulados" if pending_leads else "",
         "requiere confirmación",
         "",
     ]
     choices = [
         "Scrapear nuevos leads",
-        "Importar desde PhantomBuster",
+        "Importar desde LinkedIn (CSV manual)",
+        "Merge scraper + LinkedIn  [M]",
         "Ver lotes pendientes de upload",
         "Subir al VPS",
         "Ver resumen del último scrapeo",
@@ -203,10 +206,11 @@ def vertical_ops_menu(vertical: Vertical, pending_leads: int = 0) -> VerticalOp 
         return None
     mapping = {
         0: VerticalOp.SCRAPEAR,
-        1: VerticalOp.PHANTOMBUSTER,
-        2: VerticalOp.VER_LOTES,
-        3: VerticalOp.SUBIR_VPS,
-        4: VerticalOp.VER_RESUMEN,
+        1: VerticalOp.LINKEDIN_CSV,
+        2: VerticalOp.MERGE,
+        3: VerticalOp.VER_LOTES,
+        4: VerticalOp.SUBIR_VPS,
+        5: VerticalOp.VER_RESUMEN,
     }
     return mapping[idx]
 

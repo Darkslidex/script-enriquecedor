@@ -40,7 +40,10 @@ class Settings(BaseSettings):
     # Apollo.io — búsqueda de decisores por empresa (10.000 créditos/mes free)
     apollo_api_key: str = ""
 
-    # PhantomBuster — directorio donde se depositan los CSVs exportados
+    # LinkedIn Sales Navigator — directorio donde se depositan los CSVs exportados manualmente
+    linkedin_input_dir: str = "data/input/linkedin/"
+
+    # PhantomBuster — mantenido como referencia/fallback, no usar como fuente activa
     phantombuster_input_dir: str = "data/input/phantombuster/"
 
     # ── VPS / Upload ───────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ from .ui.menus import (
     upload_menu,
     vertical_ops_menu,
 )
+from .importers.linkedin_csv import get_linkedin_importer
 from .ui.prompts import (
     confirm,
     print_error,
@@ -147,8 +148,10 @@ def _handle_vertical_ops(vertical: Vertical) -> None:
 
         if op == VerticalOp.SCRAPEAR:
             _handle_scrape(vertical)
-        elif op == VerticalOp.PHANTOMBUSTER:
-            _handle_phantombuster(vertical)
+        elif op == VerticalOp.LINKEDIN_CSV:
+            _handle_linkedin_csv(vertical)
+        elif op == VerticalOp.MERGE:
+            _handle_merge(vertical)
         elif op == VerticalOp.VER_LOTES:
             _handle_ver_lotes(vertical)
         elif op == VerticalOp.SUBIR_VPS:
@@ -215,8 +218,12 @@ def _handle_post_scrape(vertical: Vertical) -> None:
     # idx == 2 o None → volver (no hace nada, sale de la función)
 
 
-def _handle_phantombuster(vertical: Vertical) -> None:
-    """Importa CSVs de PhantomBuster y los pasa por el pipeline de enriquecimiento."""
+def _handle_linkedin_csv(vertical: Vertical) -> None:
+    """Importa CSV exportado manualmente desde LinkedIn Sales Navigator.
+
+    Fuente oficial sin riesgo de baneo: el operador exporta desde el botón
+    nativo de Sales Navigator y copia el archivo en data/input/linkedin/.
+    """
     import asyncio
     from .pipeline import run_from_phantombuster, PipelineConfig
     from .core.config import get_settings
@@ -224,14 +231,35 @@ def _handle_phantombuster(vertical: Vertical) -> None:
     settings = get_settings()
     console.print()
     print_info(
-        f"Leyendo CSVs desde: [cyan]{settings.phantombuster_input_dir}[/cyan]\n"
-        "  Copiá los archivos exportados por PhantomBuster a ese directorio antes de continuar."
+        "[bold]Importación desde LinkedIn Sales Navigator[/bold]\n\n"
+        "  Pasos previos (hacer en LinkedIn antes de continuar):\n"
+        "  [cyan]1.[/cyan] Buscá y filtrá en Sales Navigator\n"
+        "  [cyan]2.[/cyan] Exportá el CSV con el botón nativo de LinkedIn\n"
+        f"  [cyan]3.[/cyan] Copiá el archivo en: [bold]{settings.linkedin_input_dir}[/bold]\n"
     )
-    console.print()
 
-    if not confirm("¿Continuar con el import?", default=True):
+    if not confirm("¿El CSV ya está en el directorio? Continuar", default=True):
         return
 
+    # Cargar CSVs de LinkedIn
+    importer = get_linkedin_importer()
+    leads = importer.load_all()
+
+    if not leads:
+        print_warning(
+            f"No se encontraron CSVs en [cyan]{settings.linkedin_input_dir}[/cyan]\n"
+            "  Asegurate de que el archivo tiene extensión .csv y está en ese directorio."
+        )
+        return
+
+    print_info(f"  Leads cargados desde LinkedIn: [bold]{len(leads)}[/bold]")
+    console.print()
+
+    if not confirm(f"Enriquecer {len(leads)} leads (Apollo → Hunter/Snov) y guardar lote?", default=True):
+        return
+
+    # Pasar por el pipeline de enriquecimiento
+    from .pipeline import run_from_phantombuster, PipelineConfig  # run_from_phantombuster acepta leads pre-cargados
     config = PipelineConfig(vertical=vertical, concurrency=3)
     try:
         result = asyncio.run(run_from_phantombuster(config))
@@ -242,18 +270,57 @@ def _handle_phantombuster(vertical: Vertical) -> None:
                 f"([cyan]lote #{result.lote_id}[/cyan])"
             )
         else:
-            print_warning("No se encontraron CSVs en el directorio o no se pudo guardar.")
+            print_warning("No se guardaron leads. Revisá que el directorio linkedin tenga CSVs.")
         console.print(
             f"  Importados: [bold]{result.discovered}[/bold]  "
             f"Apollo: [bold]{result.apollo_enriched}[/bold]  "
-            f"Hunter/Snov: [bold]{result.validated_email + result.snov_enriched}[/bold]  "
+            f"Validados: [bold]{result.validated_email + result.snov_enriched}[/bold]  "
             f"Errores: [red]{result.errors}[/red]"
         )
     except Exception as exc:
-        print_error(f"Error en el import PhantomBuster: {exc}")
-        log.error("cli.phantombuster_error", exc=str(exc))
+        print_error(f"Error en el pipeline LinkedIn: {exc}")
+        log.error("cli.linkedin_pipeline_error", exc=str(exc))
 
     _handle_post_scrape(vertical)
+
+
+def _handle_merge(vertical: Vertical) -> None:
+    """Merge de CSVs del scraper + LinkedIn → CSV unificado con schema Prisma."""
+    from .merger.unifier import unify
+    from .core.config import get_settings
+
+    settings = get_settings()
+    nombre = VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value)
+    console.print()
+    print_info(
+        f"[bold]Merge — {nombre}[/bold]\n\n"
+        f"  Fuente A (scraper):  [cyan]data/output/scraper_{vertical.value}_*.csv[/cyan]\n"
+        f"  Fuente B (LinkedIn): [cyan]{settings.linkedin_input_dir}*.csv[/cyan]\n"
+    )
+
+    if not confirm("¿Ejecutar merge?", default=True):
+        return
+
+    try:
+        result = unify(vertical=vertical.value)
+        console.print()
+        console.print(result.summary)
+        console.print()
+
+        if result.invalid_count:
+            print_warning(
+                f"{result.invalid_count} registros inválidos exportados a "
+                f"unified_{vertical.value}_*_INVALIDOS.csv para revisión."
+            )
+
+        if result.output_path:
+            print_success(f"CSV unificado listo para subir al VPS.")
+        else:
+            print_error("No se pudo generar el CSV unificado.")
+
+    except Exception as exc:
+        print_error(f"Error en el merge: {exc}")
+        log.error("cli.merge_error", exc=str(exc))
 
 
 # ── Lotes ──────────────────────────────────────────────────────────────────────
