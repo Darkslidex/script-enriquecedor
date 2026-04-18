@@ -104,6 +104,13 @@ class Lead(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc)
     )
 
+    # ── Decisor de contacto ────────────────────────────────────────────────
+    contacto_nombre: str | None = None
+    contacto_cargo: str | None = None
+
+    # ── Fuente ─────────────────────────────────────────────────────────────
+    fuente_descubrimiento: str | None = None
+
     # ── Notas internas ─────────────────────────────────────────────────────
     notas: str | None = None
 

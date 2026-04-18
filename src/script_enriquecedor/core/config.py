@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     hunter_api_key: str = ""
     google_places_key: str = ""
 
+    # Snov.io — fallback de Hunter (50 créditos/mes en free tier)
+    snov_client_id: str = ""
+    snov_client_secret: str = ""
+
+    # Apollo.io — búsqueda de decisores por empresa (10.000 créditos/mes free)
+    apollo_api_key: str = ""
+
+    # PhantomBuster — directorio donde se depositan los CSVs exportados
+    phantombuster_input_dir: str = "data/input/phantombuster/"
+
     # ── VPS / Upload ───────────────────────────────────────────────────────
     vps_ssh_alias: str = "bunker"
     vps_app_path: str = "/root/apps/barrios-dashboard"
@@ -51,12 +61,18 @@ class Settings(BaseSettings):
 
     @property
     def has_hunter(self) -> bool:
-        """True si Hunter.io API key está configurada."""
         return bool(self.hunter_api_key)
 
     @property
+    def has_snov(self) -> bool:
+        return bool(self.snov_client_id and self.snov_client_secret)
+
+    @property
+    def has_apollo(self) -> bool:
+        return bool(self.apollo_api_key)
+
+    @property
     def has_google_places(self) -> bool:
-        """True si Google Places API key está configurada."""
         return bool(self.google_places_key)
 
     @property
